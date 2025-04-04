@@ -1,0 +1,163 @@
+{
+  "family": "cleanaspire",
+  "networkMode": "awsvpc",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/acquanalise-fargate-task-role",
+  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/acquanalise-fargate-task-role",
+  "containerDefinitions": [
+    {
+      "name": "apiservice",
+      "image": "${ECR_REPOSITORY_URI}/cleanaspire-api:${IMAGE_TAG}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "hostPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "ASPNETCORE_ENVIRONMENT",
+          "value": "Production"
+        },
+        {
+          "name": "ASPNETCORE_URLS",
+          "value": "http://+:8080"
+        },
+        {
+          "name": "DatabaseSettings__DBProvider",
+          "value": "postgresql"
+        },
+        {
+          "name": "ClientBaseUrl",
+          "value": "https://app.acquanalise.com"
+        },
+        {
+          "name": "AllowedCorsOrigins",
+          "value": "https://app.acquanalise.com"
+        },
+        {
+          "name": "DatabaseSettings__ConnectionString",
+          "value": "Server=acquanalise-test.c9uc6w24mh3v.us-east-1.rds.amazonaws.com;Database=CleanAspire;User Id=postgres;Password=acquanalise123;Port=5432"
+        },
+        {
+          "name": "SendGrid__ApiKey",
+          "value": "placeholder-sendgrid-api-key"
+        },
+        {
+          "name": "SendGrid__DefaultFromEmail",
+          "value": "placeholder@example.com"
+        },
+        {
+          "name": "Authentication__Google__ClientId",
+          "value": "placeholder-google-client-id"
+        },
+        {
+          "name": "Authentication__Google__ClientSecret",
+          "value": "placeholder-google-client-secret"
+        },
+        {
+          "name": "Webpushr__Token",
+          "value": "placeholder-webpushr-token"
+        },
+        {
+          "name": "Webpushr__ApiKey",
+          "value": "placeholder-webpushr-api-key"
+        },
+        {
+          "name": "Minio__AccessKey",
+          "value": "placeholder-s3-access-key"
+        },
+        {
+          "name": "Minio__SecretKey",
+          "value": "placeholder-s3-secret-key"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "${AWS_LOGS_GROUP}",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "apiservice",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:8080/health || curl -f http://localhost:8080/docker-health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 120
+      }
+    },
+    {
+      "name": "blazorweb",
+      "image": "${ECR_REPOSITORY_URI}/cleanaspire-webapp:${IMAGE_TAG}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 80,
+          "hostPort": 80,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "ASPNETCORE_ENVIRONMENT",
+          "value": "Production"
+        },
+        {
+          "name": "ASPNETCORE_URLS",
+          "value": "http://+:80"
+        },
+        {
+          "name": "ClientAppSettings__ServiceBaseUrl",
+          "value": "http://localhost:8080"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "${AWS_LOGS_GROUP}",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "blazorweb",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost/ || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "dependsOn": [
+        {
+          "containerName": "apiservice",
+          "condition": "START"
+        }
+      ]
+    }
+  ],
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "1024",
+  "memory": "2048",
+  "tags": [
+    {
+      "key": "Environment",
+      "value": "Production"
+    },
+    {
+      "key": "Application",
+      "value": "CleanAspire"
+    }
+  ]
+}

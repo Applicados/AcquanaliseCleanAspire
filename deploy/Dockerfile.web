@@ -1,0 +1,48 @@
+# This stage is used to build the service project
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+ARG BUILD_CONFIGURATION=Release
+WORKDIR /src
+
+# Copy project files relative to the context (parent directory when run from deploy folder)
+COPY ["src/CleanAspire.WebApp/CleanAspire.WebApp.csproj", "src/CleanAspire.WebApp/"]
+COPY ["src/CleanAspire.ClientApp/CleanAspire.ClientApp.csproj", "src/CleanAspire.ClientApp/"]
+COPY ["src/CleanAspire.ServiceDefaults/CleanAspire.ServiceDefaults.csproj", "src/CleanAspire.ServiceDefaults/"]
+
+RUN dotnet restore "./src/CleanAspire.WebApp/CleanAspire.WebApp.csproj"
+
+# Copy all source files from the context (parent directory)
+COPY . .
+WORKDIR "/src/src/CleanAspire.WebApp"
+RUN dotnet build "./CleanAspire.WebApp.csproj" -c $BUILD_CONFIGURATION -o /app/build
+
+# This stage is used to publish the service project to be copied to the final stage
+FROM build AS publish
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet publish "./CleanAspire.WebApp.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+
+# This stage is used in production or when running from VS in regular mode
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+
+# Install curl for healthcheck
+RUN apt-get update && apt-get install -y curl
+
+# Add a healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost/ || exit 1
+
+# Setup environment variables
+ENV ASPNETCORE_URLS=http://+:80
+
+# Expose ports
+EXPOSE 80
+
+# Set the environment variable for ASP.NET Core to use Production settings
+ENV ASPNETCORE_ENVIRONMENT=Production
+
+# Set API service URL explicitly - use apiservice for docker-compose, localhost for ECS
+ENV ClientAppSettings__ServiceBaseUrl=http://apiservice:8080
+
+# Start the application
+ENTRYPOINT ["dotnet", "CleanAspire.WebApp.dll"]

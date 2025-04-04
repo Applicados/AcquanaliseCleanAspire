@@ -2,6 +2,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
+# Copy project files relative to the context (parent directory when run from deploy folder)
 COPY ["src/CleanAspire.Api/CleanAspire.Api.csproj", "src/CleanAspire.Api/"]
 COPY ["src/CleanAspire.Application/CleanAspire.Application.csproj", "src/CleanAspire.Application/"]
 COPY ["src/CleanAspire.Domain/CleanAspire.Domain.csproj", "src/CleanAspire.Domain/"]
@@ -13,6 +14,7 @@ COPY ["src/Migrators/Migrators.SQLite/Migrators.SQLite.csproj", "src/Migrators/M
 
 RUN dotnet restore "src/CleanAspire.Api/CleanAspire.Api.csproj"
 
+# Copy all source files from the context (parent directory)
 COPY . .
 WORKDIR /src/src/CleanAspire.Api
 RUN dotnet publish "./CleanAspire.Api.csproj" -c Release -o /app/publish
@@ -24,30 +26,24 @@ WORKDIR /app
 # Copy the build output from the previous stage
 COPY --from=build /app/publish .
 
-# Install OpenSSL
-RUN apt-get update && apt-get install -y openssl
+# Install curl for health check
+RUN apt-get update && apt-get install -y curl
 
-# Generate a self-signed certificate
-RUN mkdir -p /app/https && \
-    openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
-    -keyout /app/https/private.key -out /app/https/certificate.crt \
-    -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost" && \
-    openssl pkcs12 -export -out /app/https/aspnetapp.pfx \
-    -inkey /app/https/private.key -in /app/https/certificate.crt \
-    -password pass:CREDENTIAL_PLACEHOLDER
+# Add a healthcheck with both standard and custom endpoints
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+  CMD curl -f http://localhost:8080/health || curl -f http://localhost:8080/docker-health || exit 1
 
-
-# Setup environment variables for the application to find the certificate
-ENV ASPNETCORE_URLS=http://+:80;https://+:443
-ENV ASPNETCORE_Kestrel__Certificates__Default__Password="CREDENTIAL_PLACEHOLDER"
-ENV ASPNETCORE_Kestrel__Certificates__Default__Path="/app/https/aspnetapp.pfx"
-
+# Set base URL
+ENV ASPNETCORE_URLS=http://+:8080
 
 # Expose ports
-EXPOSE 80 443
+EXPOSE 8080
 
 # Set the environment variable for ASP.NET Core to use Production settings
-ENV ASPNETCORE_ENVIRONMENT=Development
+ENV ASPNETCORE_ENVIRONMENT=Production
+
+# Set DB provider explicitly
+ENV DatabaseSettings__DBProvider=postgresql
 
 # Start the application
 ENTRYPOINT ["dotnet", "CleanAspire.Api.dll"]

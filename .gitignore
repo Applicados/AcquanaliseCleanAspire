@@ -368,3 +368,6 @@ src/CleanAspire.Api/appsettings.Development.json
 src/CleanAspire.Api/files/
 src/CleanAspire.Api/CleanAspire.Api.json
 src/CleanAspire.Api/pushsubscription.sqlitedb
+/deploy/CLAUDE.md
+/deploy/deploy.log
+/deploy/deploy.log
